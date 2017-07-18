@@ -5,7 +5,6 @@ import os
 ZIP_FILE = "anime-recommendations-database"
 DATA_FILE = "anime.csv"
 NEW_DATA_FILE = "anime_cleaned.csv"
-OTHER_FILES = ["rating.csv"]
 
 def clean_by_id(df):
     ids = df.iloc[:,0]
@@ -42,9 +41,9 @@ def clean_genres(df):
     return df
     
     
-def open_zip(datafile):
-    with ZipFile('{0}.zip'.format(datafile), 'r') as myzip:
-        myzip.extractall()
+def open_zip(zipfile, datafile):
+    with ZipFile('{0}.zip'.format(zipfile), 'r') as myzip:
+        myzip.extract(datafile)
         
 def clean_traces(datafiles):
     for datafile in datafiles:
@@ -66,14 +65,14 @@ def create_dataframe(datafile):
     return df
 
 def generate_database(df, datafile):
-    df.to_csv(NEW_DATA_FILE, encoding='utf-8', index=False)
+    df.to_csv(datafile, encoding='utf-8', index=False)
     print("Database created in " + datafile)
   
 
-open_zip(ZIP_FILE)
+open_zip(ZIP_FILE, DATA_FILE)
 dataframe = create_dataframe(DATA_FILE)
 generate_database(dataframe, NEW_DATA_FILE)
-clean_traces( OTHER_FILES + [DATA_FILE] )
+clean_traces( [DATA_FILE] )
     
     
     
