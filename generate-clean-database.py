@@ -5,6 +5,7 @@ import os
 ZIP_FILE = "anime-recommendations-database"
 DATA_FILE = "anime.csv"
 NEW_DATA_FILE = "anime_cleaned.csv"
+DIR = "DATABASE"
 
 def clean_by_id(df):
     ids = df.iloc[:,0]
@@ -64,18 +65,16 @@ def create_dataframe(datafile):
     
     return df
 
-def generate_database(df, datafile):
+def generate_database(df, datafile, dirc):
+    if not os.path.exists(dirc):
+        os.makedirs(dirc)
+    datafile = dirc + "\\" + datafile
     df.to_csv(datafile, encoding='utf-8', index=False)
     print("Database created in " + datafile)
   
 
 open_zip(ZIP_FILE, DATA_FILE)
 dataframe = create_dataframe(DATA_FILE)
-generate_database(dataframe, NEW_DATA_FILE)
-clean_traces( [DATA_FILE] )
-    
-    
-    
-    
-    
+generate_database(dataframe, NEW_DATA_FILE, DIR)
+clean_traces( [DATA_FILE])
     
