@@ -2,11 +2,14 @@ import pandas as pd
 import os
 from zipfile import ZipFile
 import json
+import re
 
 ZIP_FILE = "anime-recommendations-database"
 DATA_FILE = "rating.csv"
-NEW_DATA_FILE = "rating_cleaned.json"
+ANIME_FILE = "anime_cleaned.csv"
+NEW_DATA_FILE = "rating_cleaned2.json"
 DIR = "DATABASE"
+CSV_SPLITTER = re.compile(",\s*")
 
 
 def open_zip(zipfile, datafile):
@@ -21,24 +24,37 @@ def create_rated_database(datafile):
     df = clean_database(df)
     return df
 
+
 def clean_database(df):
     
     data = {}
     
-    for i in range( len(df) ):
-        percent = int((i/len(df))*10000)/100
-        print(str(percent) + "% done")
+    af=pd.read_csv(DIR+"/"+ANIME_FILE, encoding="utf8")
+    
+    a_to_g = dict( zip( af.anime_id , af.genre ) )
+    percentizer, index = 100/len(df), 0
+    
+    for r, u, a in zip( df.rating, df.user_id, df.anime_id ):        
+        if a not in a_to_g:
+            print(str(a) + " not in known")
+            continue
+        g = a_to_g[a]
         
-        r = int(df.loc[i, "rating"])
-        u = str(df.loc[i,"user_id"])
-        a = str(df.loc[i,"anime_id"])
+        u = str(u)
+        r = int(r)
         
         if r != -1:
             if u not in data:
                 data[u] = {}
-            data[u][a] = r
+            aKey = str(a)
+            data[u][aKey] = {}
+            data[u][aKey]["genre"] = CSV_SPLITTER.split(g.strip())
+            data[u][aKey]["rating"] = r
             
-    print("100% done")
+        percent = index*percentizer
+        index += 1
+        print("{:05.2f}% done".format(percent))    
+    
     return data
 
 def generate_rated_database(df, datafile, dirc):
