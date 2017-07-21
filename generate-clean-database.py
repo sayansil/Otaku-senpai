@@ -69,7 +69,7 @@ def generate_database(df, datafile, dirc):
     if not os.path.exists(dirc):
         os.makedirs(dirc)
     datafile = dirc + "\\" + datafile
-    df.to_csv(datafile, encoding='utf-8', index=False)
+    df.to_csv(datafile, sep='~', encoding='utf-8', index=False)
     print("Database created in " + datafile)
   
 
