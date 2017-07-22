@@ -1,79 +1,100 @@
-import pandas as pd
-import os
-from zipfile import ZipFile
-import json
-import re
+import sys
+import itertools
+import time
+from utils import split_csv, genres_tuple, csv_to_dataframe_parsing_lists
 
-ZIP_FILE = "anime-recommendations-database"
-DATA_FILE = "rating.csv"
-ANIME_FILE = "anime_cleaned.csv"
-NEW_DATA_FILE = "rating_cleaned2.json"
-DIR = "DATABASE"
-CSV_SPLITTER = re.compile(",\s*")
+LOOKUP_FILE = "./DATABASE/anime_cleaned.tsv"
+DATA_FILE = "./DATABASE/ratings.csv"
 
+USER_KEY = 'user_id'
+INFO_KEY = 'genre_ratings'
+COUNT_KEY = 'genre_ratings_count'
 
-def open_zip(zipfile, datafile):
-    zipfile = '{0}.zip'.format(zipfile)
-    print("Extracting " + zipfile)
-    with ZipFile(zipfile, 'r') as myzip:
-        myzip.extract(datafile)
+class Ratings(object):
+    def __init__(self, data_file, id_lookup_file):
+        self.data_file = data_file
+        self.lines_processed = 0
+        self.users_processed = 0
+        raw_lookup = csv_to_dataframe_parsing_lists(id_lookup_file)
+        self.genres = genres_tuple(raw_lookup)
+        genre_index = dict(zip(self.genres, range(len(self.genres))))
+        self.id_lookup = dict(zip(raw_lookup.anime_id, map(lambda genres: list(map(lambda genre: genre_index[genre], genres)), raw_lookup.genre)))
 
-def create_rated_database(datafile):
-    df = pd.read_csv(datafile, encoding = 'utf8')
-    
-    df = clean_database(df)
-    return df
-
-
-def clean_database(df):
-    
-    data = {}
-    
-    af=pd.read_csv(DIR+"/"+ANIME_FILE, encoding="utf8")
-    
-    a_to_g = dict( zip( af.anime_id , af.genre ) )
-    percentizer, index = 100/len(df), 0
-    
-    for r, u, a in zip( df.rating, df.user_id, df.anime_id ):        
-        if a not in a_to_g:
-            print(str(a) + " not in known")
-            continue
-        g = a_to_g[a]
-        
-        u = str(u)
-        r = int(r)
-        
-        if r != -1:
-            if u not in data:
-                data[u] = {}
-            aKey = str(a)
-            data[u][aKey] = {}
-            data[u][aKey]["genre"] = CSV_SPLITTER.split(g.strip())
-            data[u][aKey]["rating"] = r
-            
-        percent = index*percentizer
-        index += 1
-        print("{:05.2f}% done".format(percent))    
-    
-    return data
-
-def generate_rated_database(df, datafile, dirc):
-    if not os.path.exists(dirc):
-        os.makedirs(dirc)
-        
-    datafile = dirc + "\\" + datafile
-    
-    fp= open(datafile, "w")
-    json.dump(df, fp, indent=4)
-    fp.close()
-    print("Database created in " + datafile)
-
-def clean_traces(datafiles):
-    for datafile in datafiles:
-        os.remove(datafile, dir_fd=None)
+    def intialize_user_data(self, key):
+        user = {USER_KEY: key}
+        user[INFO_KEY] = []
+        user[COUNT_KEY] = []
+        for genre_id in range(len(self.genres)):
+            user[INFO_KEY].append(None)
+            user[COUNT_KEY].append(0)
+        return user
 
 
-open_zip(ZIP_FILE, DATA_FILE)
-df = create_rated_database(DATA_FILE)
-generate_rated_database(df, NEW_DATA_FILE, DIR)
-clean_traces([DATA_FILE])
+    def normalize(dataframe, index = USER_KEY):
+        return dataframe.set_index(index)
+
+    def finalize_user(user):
+        final_user = {USER_KEY: user[USER_KEY]}
+        final_user[INFO_KEY] = list(map(lambda x: 0.0 if x is None else round(x, 2) , user[INFO_KEY]))
+        return final_user
+
+    def stream_data(self):
+        with open(self.data_file, 'r') as raw_data:
+            for line in raw_data.readlines():
+                self.lines_processed += 1
+                if self.lines_processed == 1:
+                    continue
+                else:
+                    yield tuple(map(lambda x: int(x), split_csv(line.strip())))
+
+    def remove_unrated_entries(self):
+        for datum in self.stream_data():
+            # Rating is field# 2
+            if datum[2] >= 0:
+                yield datum
+
+    def pack_by_user(self):
+        return itertools.groupby(self.remove_unrated_entries(), key = lambda x: x[0])
+
+    def process_user_info(self):
+        for key, user_info in self.pack_by_user():
+            user_data = self.intialize_user_data(key)
+            for user_id, anime_id, rating in user_info:
+                print("{:d} entries processed".format(self.lines_processed))
+                # Avoid edge cases at the boundary between cleaned and raw data
+                if anime_id in self.id_lookup:
+                    genre_ids = self.id_lookup[anime_id]
+
+                    for genre_id in genre_ids:
+                        genre_rated_count = user_data[COUNT_KEY][genre_id]
+                        # Cumulative Moving Average
+                        if user_data[INFO_KEY][genre_id] is None:
+                            user_data[INFO_KEY][genre_id] = rating
+                        else:
+                            user_data[INFO_KEY][genre_id] = (rating + (genre_rated_count * user_data[INFO_KEY][genre_id])) / (genre_rated_count + 1)
+                        user_data[COUNT_KEY][genre_id] += 1
+
+            self.users_processed += 1
+            print("{:d} users processed".format(self.users_processed))
+
+            yield Ratings.finalize_user(user_data)
+
+    def format_for_csv(prefix, data):
+        return ", ".join(map(str, [prefix] + data))
+
+    def format_user_data_for_csv(user_data):
+        return Ratings.format_for_csv(user_data[USER_KEY], user_data[INFO_KEY])
+
+    def pack_results(self, output_file_path = 'ratings_cleaned.csv'):
+        with open(output_file_path, 'w') as output_file:
+            output_file.write(Ratings.format_for_csv(USER_KEY, list(self.genres)) + "\n")
+            output_file.writelines(map(lambda item: Ratings.format_user_data_for_csv(item) + "\n", self.process_user_info()))
+        print("Total entries processed = {:d}, Total users = {:d} processed".format(self.lines_processed - 1, self.users_processed))
+
+def main(argv):
+    start_time = time.time()
+    Ratings(DATA_FILE, LOOKUP_FILE).pack_results()
+    print("{:d} seconds taken for processing".format(int(time.time() - start_time)))
+
+if __name__ == "__main__":
+    main(sys.argv)

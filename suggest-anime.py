@@ -1,48 +1,27 @@
 import pandas as pd
 import difflib
-import re
 import sys
+from utils import split_csv, uprint, csv_to_dataframe_parsing_lists, genres_tuple
 
-DATA_FILE = "./DATABASE/anime_cleaned.csv"
-CSV_SEP = re.compile(",\s*")
-
-def split_csv(csv_str):
-    return CSV_SEP.split(csv_str)
-
-def uprint(*objects, sep=' ', end='\n', file=sys.stdout):
-    enc = file.encoding
-    if enc == 'UTF-8':
-        print(*objects, sep=sep, end=end, file=file)
-    else:
-        f = lambda obj: str(obj).encode(enc, errors='backslashreplace').decode(enc)
-        print(*map(f, objects), sep=sep, end=end, file=file)
+DATA_FILE = "./DATABASE/anime_cleaned.tsv"
 
 class AnimeByGenre(object):
     def __init__(self, data_file):
-        self.raw_data = pd.read_csv(data_file, encoding = 'utf8', sep = '~')
-        self.raw_data.genre = list(map(lambda genres: split_csv(genres), self.raw_data.genre))
-
-    def all_genres(self):
-        yielded_genres = set()
-        for genres in self.raw_data.genre:
-            for genre in genres:
-                if genre not in yielded_genres:
-                    yielded_genres.add(genre)
-                    yield genre
-
+        self.raw_data = csv_to_dataframe_parsing_lists(data_file)
 
     def containing_genre(self, genre):
         genre_set = set(genre)
         filtered = list(filter(lambda item: genre_set < set(map(lambda x: x.lower(), item['genre'])), self.raw_data.to_dict(orient = 'records')))
-        return pd.DataFrame.from_records(filtered, index='anime_id').sort_values(by = 'rating', ascending = False)
-
+        if not filtered:
+            return None
+        else:
+            return pd.DataFrame.from_records(filtered, index = 'anime_id').sort_values(by = 'rating', ascending = False)
 
     def data(self):
         return self.raw_data.set_index('anime_id')
 
-
     def find_by_genre(self, genre, output_file = sys.stdout):
-        genres = self.all_genres()
+        genres = genres_tuple(self.raw_data)
         normalized_genres = list(map(lambda x: x.strip().lower(), genres))
 
         genre = genre.strip().lower()
@@ -67,7 +46,9 @@ class AnimeByGenre(object):
                 print(specific_genre, file = output_file)
 
         if not entry_error:
-            uprint(self.containing_genre(genre).to_csv(), file = output_file)
+            results = self.containing_genre(genre)
+            results_exist = not (results is None or results.empty)
+            uprint(results.to_csv() if results_exist else "No anime found matching all genres provided.", file = output_file)
 
 def main(argv):
     AnimeByGenre(DATA_FILE).find_by_genre(input("Enter genre(s) to find anime for: ") if len(argv) < 2 else ",".join(argv[1:]))
