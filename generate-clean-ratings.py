@@ -1,4 +1,5 @@
 import sys
+import os
 import itertools
 import time
 from utils import split_csv, genres_tuple, csv_to_dataframe_parsing_lists
@@ -9,6 +10,7 @@ DATA_FILE = "./DATABASE/ratings.csv"
 USER_KEY = 'user_id'
 INFO_KEY = 'genre_ratings'
 COUNT_KEY = 'genre_ratings_count'
+ANIME_KEY = 'animes_rated'
 
 class Ratings(object):
     def __init__(self, data_file, id_lookup_file):
@@ -24,6 +26,7 @@ class Ratings(object):
         user = {USER_KEY: key}
         user[INFO_KEY] = []
         user[COUNT_KEY] = []
+        user[ANIME_KEY] = []
         for genre_id in range(len(self.genres)):
             user[INFO_KEY].append(None)
             user[COUNT_KEY].append(0)
@@ -34,7 +37,7 @@ class Ratings(object):
         return dataframe.set_index(index)
 
     def finalize_user(user):
-        final_user = {USER_KEY: user[USER_KEY]}
+        final_user = {USER_KEY: user[USER_KEY], ANIME_KEY: user[ANIME_KEY]}
         final_user[INFO_KEY] = list(map(lambda x: 0.0 if x is None else round(x, 2) , user[INFO_KEY]))
         return final_user
 
@@ -63,6 +66,7 @@ class Ratings(object):
                 print("{:d} entries processed".format(self.lines_processed))
                 # Avoid edge cases at the boundary between cleaned and raw data
                 if anime_id in self.id_lookup:
+                    user_data[ANIME_KEY].append(anime_id)
                     genre_ids = self.id_lookup[anime_id]
 
                     for genre_id in genre_ids:
@@ -79,17 +83,28 @@ class Ratings(object):
 
             yield Ratings.finalize_user(user_data)
 
-    def format_for_csv(prefix, data):
-        return ", ".join(map(str, [prefix] + data))
+    def format_for_csv(prefix, data, suffix):
+        return "\t".join(map(str, [prefix] + data + [suffix]))
 
     def format_user_data_for_csv(user_data):
-        return Ratings.format_for_csv(user_data[USER_KEY], user_data[INFO_KEY])
+        return Ratings.format_for_csv(user_data[USER_KEY], user_data[INFO_KEY], user_data[ANIME_KEY])
 
-    def pack_results(self, output_file_path = 'ratings_cleaned.csv'):
-        with open(output_file_path, 'w') as output_file:
-            output_file.write(Ratings.format_for_csv(USER_KEY, list(self.genres)) + "\n")
+    def pack_results(self, output_file_path = 'ratings_cleaned.tsv'):
+        tmp_output = output_file_path+".tmp"
+        with open(tmp_output, 'w') as output_file:
+            output_file.write(Ratings.format_for_csv(USER_KEY, list(self.genres), ANIME_KEY) + "\n")
             output_file.writelines(map(lambda item: Ratings.format_user_data_for_csv(item) + "\n", self.process_user_info()))
-        print("Total entries processed = {:d}, Total users = {:d} processed".format(self.lines_processed - 1, self.users_processed))
+        print("All entries processed, consolidating output")
+        with open(output_file_path, 'w') as output_file:
+            output_file.write("#{:d},{:d}\n".format(self.lines_processed - 1, self.users_processed))
+            entries_consolidated = 0
+            with open(tmp_output, 'r') as input_file:
+                for line in input_file.readlines():
+                    output_file.write(line)
+                    entries_consolidated += 1
+                    print("{:d} entries consolidated of {:d} entries".format(entries_consolidated, self.users_processed))
+            os.remove(tmp_output)
+
 
 def main(argv):
     start_time = time.time()

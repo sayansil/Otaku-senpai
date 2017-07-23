@@ -1,5 +1,4 @@
 import pandas as pd
-import os
 
 DATA_FILE = "./DATABASE/anime.csv"
 NEW_DATA_FILE = "./DATABASE/anime_cleaned.tsv"
@@ -57,4 +56,3 @@ def generate_database(df, datafile):
     print("Database created in " + datafile)
 
 generate_database(create_dataframe(DATA_FILE), NEW_DATA_FILE)
-

@@ -3,13 +3,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from sklearn.cluster.bicluster import SpectralCoclustering
-from utils import genres_tuple, csv_to_dataframe_parsing_lists
+from utils import genres_tuple, csv_to_dataframe_parsing_lists, load_saved_database
 
-RATINGS_FILE = "./DATABASE/ratings_cleaned.csv"
+RATINGS_FILE = "./DATABASE/ratings_cleaned.tsv"
 ANIME_FILE = "./DATABASE/anime_cleaned.tsv"
 OUTPUT_DIR = "./ANALYSIS"
 
-def cocluster_data(users, n_clusters = 5):
+
+def cocluster_data(data, n_clusters = 5):
+    users = data.df
     matrix = users.iloc[:, 1:]
 
     clustered_model = SpectralCoclustering(n_clusters = n_clusters, random_state = 0)
@@ -55,16 +57,14 @@ def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
         os.makedirs(output_dir)
     plt.savefig("{}/{}.pdf".format(output_dir, name))
 
-def correlate_data(df):
-    return pd.DataFrame.corr(df.iloc[:, 1:])
+def correlate_data(data):
+    return pd.DataFrame.corr(data.df.iloc[:, 1:])
 
-def load_saved_database(datafile):
-    return pd.read_csv(datafile, encoding="utf8")
-
-def analyse_saved_data(df):
+def analyse_saved_data(df_file):
+    df = load_saved_database(df_file, preserve_anime_data = False)
     c1 = correlate_data(df)
     plot_correlation(c1,"correlated-genres")
     c2 = cocluster_data(df, n_clusters=2)
     plot_correlation(c2,"coclustered-genres")
 
-analyse_saved_data(load_saved_database(RATINGS_FILE))
+analyse_saved_data(RATINGS_FILE)
