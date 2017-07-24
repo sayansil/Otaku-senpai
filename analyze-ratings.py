@@ -17,20 +17,18 @@ def cluster_data(users, n_clusters):
     clustered_model = SpectralCoclustering(n_clusters = n_clusters, random_state = 0)
     clustered_model.fit(pd.DataFrame.corr(matrix))
     feed = clustered_model.row_labels_
-# Disabled - this was clearly never tested - it takes up 4+ GB RAM to no end.
-# Will have to try a manual clustering as suggested.
 
-#    genres = users.iloc[:,1:].transpose()
-#    genres["Group"] = pd.Series(feed, index=genres.index)
-#    genres = genres.iloc[np.argsort(clustered_model.row_labels_)]
-#
-#    return genres
+    genres = users.iloc[:,1:].transpose()
+    genres["Group"] = pd.Series(feed, index=genres.index)
+    genres = genres.iloc[np.argsort(clustered_model.row_labels_)]
 
-    users = matrix.transpose()
-    users.Group = pd.Series(feed, index = users.index)
-    users = users.iloc[np.argsort(feed)]
-    matrix = users.iloc[:, :-1].transpose()
-    return pd.DataFrame.corr(matrix)
+    return genres
+
+#    users = matrix.transpose()
+#    users.Group = pd.Series(feed, index = users.index)
+#    users = users.iloc[np.argsort(feed)]
+#    matrix = users.iloc[:, :-1].transpose()
+#    return pd.DataFrame.corr(matrix)
 
 def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
     labelsY = list(corr_list)
@@ -58,7 +56,7 @@ def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
     plt.savefig("{}/{}.pdf".format(output_dir, name))
 
 def correlate_data(data):
-    return pd.DataFrame.corr(data.iloc[:, 1:])
+    return pd.DataFrame.corr(data)
 
 class Baseline(Enum):
     MODE = 1
@@ -105,14 +103,27 @@ def rating_map(data, baseline=Baseline.MODE):
 
     return pd.DataFrame(np.matrix(corr_matrix), columns=ordered_genres)
 
-def analyse_saved_data(df_file):
+def analyse_saved_data_new(df_file):
     df = load_saved_database(df_file, preserve_anime_data=False)
-    c1 = correlate_data(df)
-    plot_correlation(c1,"correlated-genres")
-#    c2 = cluster_data(df, n_clusters=2)
-#    plot_correlation(c2,"coclustered-genres")
     c3 = rating_map(df)
-    c3.to_csv("log.txt",index=False)
+    c3.to_csv("log1.txt",index=False)
     plot_correlation(c3,"rating-mapped-genres")
+
+def analyse_saved_data(df_file):
+    data = load_saved_database(df_file, preserve_anime_data = False)
+
+    c1 = correlate_data(data.iloc[:, 1:])
+    plot_correlation(c1,"correlated-genres")
+
+    clustered_data = cluster_data(data, n_clusters=2)
+
+    c2 = correlate_data(clustered_data.iloc[:,:-1].transpose())
+    plot_correlation(c2,"coclustered-genres")
+
+    genre2cluster = dict(zip(clustered_data.index, clustered_data.Group))
+    cluster2genre = {group : list(clustered_data.loc[clustered_data.Group == group].index) for group in set(clustered_data.Group)}
+
+    genre_relations = {**genre2cluster, **cluster2genre}
+    print(genre_relations, file=open("log2.txt", 'w'))
 
 analyse_saved_data(RATINGS_FILE)
