@@ -3,34 +3,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from sklearn.cluster.bicluster import SpectralCoclustering
-from utils import genres_tuple, csv_to_dataframe_parsing_lists, load_saved_database
+from utils import load_saved_database
 
 RATINGS_FILE = "./DATABASE/ratings_cleaned.tsv"
 ANIME_FILE = "./DATABASE/anime_cleaned.tsv"
 OUTPUT_DIR = "./ANALYSIS"
 
-
 def cocluster_data(data, n_clusters = 5):
     users = data.df
     matrix = users.iloc[:, 1:]
-
     clustered_model = SpectralCoclustering(n_clusters = n_clusters, random_state = 0)
     clustered_model.fit(pd.DataFrame.corr(matrix))
-
     feed = clustered_model.row_labels_
-
     users = matrix.transpose()
-
     users.Group = pd.Series(feed, index = users.index)
     users = users.iloc[np.argsort(feed)]
-    users = users.reset_index(drop = True)
-
     matrix = users.iloc[:, :-1].transpose()
-    genres = genres_tuple(csv_to_dataframe_parsing_lists(ANIME_FILE))
-    matrix.columns = genres
-
     return pd.DataFrame.corr(matrix)
-
 
 def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
     labelsY = corr_list.index
