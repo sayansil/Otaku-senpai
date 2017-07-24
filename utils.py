@@ -31,20 +31,11 @@ def csv_to_dataframe_parsing_lists(csv_file, sep = "\t", comment = None, key = '
     raw_lookup[key] = list(map(lambda item_list: split_csv(item_list[1:-1] if drop_enclosing else item_list), raw_lookup[key]))
     return raw_lookup
 
-
-class Data(object):
-    def __init__(self, entries, users, df, preserve_anime_data = False):
-        self.entries = int(entries)
-        self.user = int(users)
-        if preserve_anime_data:
-            self.df = csv_to_dataframe_parsing_lists(df, key = ANIME_KEY, drop_enclosing = True, comment = '#')
-        else:
-            self.df = csv_to_dataframe(df, sep = '\t', comment = '#', keys_to_drop = [ANIME_KEY])
-
-def load_saved_database(datafile, preserve_anime_data = True):
-    with open(datafile) as input_file:
-        entries, users = tuple(split_csv(input_file.readline()[1:]))
-    return Data(entries, users, datafile, preserve_anime_data = preserve_anime_data)
+def load_saved_database(df, preserve_anime_data = True):
+    if preserve_anime_data:
+        return csv_to_dataframe_parsing_lists(df, key = ANIME_KEY, drop_enclosing = True)
+    else:
+        return csv_to_dataframe(df, sep = '\t', keys_to_drop = [ANIME_KEY])
 
 def empty_dataframe_based_on(existing_dataframe):
     columns = existing_dataframe.dtypes.index

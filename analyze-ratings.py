@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from sklearn.cluster.bicluster import SpectralCoclustering
+from enum import Enum
 from utils import load_saved_database
 
 RATINGS_FILE = "./DATABASE/ratings_cleaned.tsv"
@@ -22,7 +23,7 @@ def cocluster_data(data, n_clusters = 5):
     return pd.DataFrame.corr(matrix)
 
 def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
-    labelsY = corr_list.index
+    labelsY = list(corr_list)
     labelsX = labelsY[:]
 
     fig, ax = plt.subplots()
@@ -49,11 +50,58 @@ def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
 def correlate_data(data):
     return pd.DataFrame.corr(data.df.iloc[:, 1:])
 
+class Baseline(Enum):
+    MODE = 1
+    MEDIAN = 2
+    MEAN = 3
+
+def manual_correlate(data, baseline=Baseline.MODE):
+    df = data.set_index('user_id')
+    genres = list(df)[1:]
+    genre_count = len(genres)
+
+    def calc_baseline(key):
+        if baseline is Baseline.MODE:
+            return df[key][df[key] > 0.0].mode()[0]
+        elif baseline is Baseline.MEAN:
+            return df[key].mean()
+        elif baseline is Baseline.MEDIAN:
+            return df[key].median()
+        else:
+            raise ValueError("'baseline' must be one of 'mean', median' or 'mode'")
+
+    genre_info = {genre: calc_baseline(genre) for genre in genres}
+
+    def count_users(a, b):
+        return len(df[a][df[a] >= genre_info[b]])
+
+    def rated_users(a):
+        return len(df[a][df[a] > 0.0])
+
+    corr_matrix = np.zeros((genre_count, genre_count))
+
+    ordered_genres = list(sorted(genres, key=lambda x: genre_info[x], reverse=True))
+    genres_with_indices = list(enumerate(ordered_genres))
+    with open('log2.txt', 'w+') as log:
+        for i, a in genres_with_indices:
+            for j, b in genres_with_indices:
+                p_a = count_users(a, a) / rated_users(a)
+                p_b_a = count_users(b, a) / rated_users(b)
+                # Probability can be maximally 1
+                p_b_given_a = min(1.0, p_b_a / p_a)
+                print("{}, {} -> {}, {} = {}/{} = {}".format(i, j, a, b, p_b_a, p_a, p_b_given_a), file=log)
+                corr_matrix[i][j] = p_b_given_a
+
+    return pd.DataFrame(np.matrix(corr_matrix), columns=ordered_genres)
+
 def analyse_saved_data(df_file):
-    df = load_saved_database(df_file, preserve_anime_data = False)
-    c1 = correlate_data(df)
-    plot_correlation(c1,"correlated-genres")
-    c2 = cocluster_data(df, n_clusters=2)
-    plot_correlation(c2,"coclustered-genres")
+    df = load_saved_database(df_file, preserve_anime_data=False)
+#    c1 = correlate_data(df)
+#    plot_correlation(c1,"correlated-genres")
+#    c2 = cocluster_data(df, n_clusters=2)
+#    plot_correlation(c2,"coclustered-genres")
+    c3 = manual_correlate(df)
+    c3.to_csv("log.txt",index=False)
+    plot_correlation(c3,"manual-correlated-genres")
 
 analyse_saved_data(RATINGS_FILE)

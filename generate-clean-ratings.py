@@ -90,21 +90,10 @@ class Ratings(object):
         return Ratings.format_for_csv(user_data[USER_KEY], user_data[INFO_KEY], user_data[ANIME_KEY])
 
     def pack_results(self, output_file_path = 'ratings_cleaned.tsv'):
-        tmp_output = output_file_path+".tmp"
-        with open(tmp_output, 'w') as output_file:
+        with open(output_file_path, 'w') as output_file:
             output_file.write(Ratings.format_for_csv(USER_KEY, list(self.genres), ANIME_KEY) + "\n")
             output_file.writelines(map(lambda item: Ratings.format_user_data_for_csv(item) + "\n", self.process_user_info()))
-        print("All entries processed, consolidating output")
-        with open(output_file_path, 'w') as output_file:
-            output_file.write("#{:d},{:d}\n".format(self.lines_processed - 1, self.users_processed))
-            entries_consolidated = 0
-            with open(tmp_output, 'r') as input_file:
-                for line in input_file.readlines():
-                    output_file.write(line)
-                    entries_consolidated += 1
-                    print("{:d} entries consolidated of {:d} entries".format(entries_consolidated, self.users_processed))
-            os.remove(tmp_output)
-
+        print("Entries processed = {:d}, Users processed = {:d}".format(self.lines_processed - 1, self.users_processed))
 
 def main(argv):
     start_time = time.time()

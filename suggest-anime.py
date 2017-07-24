@@ -21,7 +21,7 @@ NAME_KEY = 'name'
 class AnimeByGenre(object):
     def __init__(self, data_file, user_data_file):
         self.raw_data = csv_to_dataframe_parsing_lists(data_file)
-        self.user_data = load_saved_database(user_data_file).df.set_index('user_id')
+        self.user_data = load_saved_database(user_data_file).set_index('user_id')
         self.known_user_ids = frozenset(self.user_data.index.values)
         self.genres = self.user_data.dtypes.index[1:-1]
         self.anime_data_indexed = self.raw_data.set_index(ANIME_KEY)
