@@ -47,7 +47,7 @@ class AnimeByGenre(object):
         return set(self.user_data.loc[[user_id], [self.user_data.dtypes.index[-1]]].values[0][0])
 
     def animes_watched_by_user(self, user_ids):
-        return dict((user_id, list((self.anime_data_indexed.loc[[int(anime_id)]] for anime_id in self.user_watched_anime_ids(user_id)))) for user_id in user_ids)
+        return dict(((user_id, self.anime_data_indexed.loc[list(map(int, self.user_watched_anime_ids(user_id)))]) for user_id in user_ids))
 
     def suggested_anime_by_user(self, user_ids, genres_to_consider, filter_seen=True, as_dataframe=True):
         genre_id_lookup = dict(enumerate(genres_tuple(self.raw_data)))
