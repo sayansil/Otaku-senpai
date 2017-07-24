@@ -3,7 +3,9 @@ DATABASE/
 
 # Output Files
 ANALYSIS/*
-log.txt
+
+# All types of log files
+log*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

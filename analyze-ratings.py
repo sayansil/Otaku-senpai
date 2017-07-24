@@ -10,12 +10,22 @@ RATINGS_FILE = "./DATABASE/ratings_cleaned.tsv"
 ANIME_FILE = "./DATABASE/anime_cleaned.tsv"
 OUTPUT_DIR = "./ANALYSIS"
 
-def cocluster_data(data, n_clusters = 5):
-    users = data.df
+MAX_RATING = 10
+
+def cluster_data(users, n_clusters):
     matrix = users.iloc[:, 1:]
     clustered_model = SpectralCoclustering(n_clusters = n_clusters, random_state = 0)
     clustered_model.fit(pd.DataFrame.corr(matrix))
     feed = clustered_model.row_labels_
+# Disabled - this was clearly never tested - it takes up 4+ GB RAM to no end.
+# Will have to try a manual clustering as suggested.
+
+#    genres = users.iloc[:,1:].transpose()
+#    genres["Group"] = pd.Series(feed, index=genres.index)
+#    genres = genres.iloc[np.argsort(clustered_model.row_labels_)]
+#
+#    return genres
+
     users = matrix.transpose()
     users.Group = pd.Series(feed, index = users.index)
     users = users.iloc[np.argsort(feed)]
@@ -48,14 +58,14 @@ def plot_correlation(corr_list, name, output_dir = OUTPUT_DIR):
     plt.savefig("{}/{}.pdf".format(output_dir, name))
 
 def correlate_data(data):
-    return pd.DataFrame.corr(data.df.iloc[:, 1:])
+    return pd.DataFrame.corr(data.iloc[:, 1:])
 
 class Baseline(Enum):
     MODE = 1
     MEDIAN = 2
     MEAN = 3
 
-def manual_correlate(data, baseline=Baseline.MODE):
+def rating_map(data, baseline=Baseline.MODE):
     df = data.set_index('user_id')
     genres = list(df)[1:]
     genre_count = len(genres)
@@ -78,14 +88,17 @@ def manual_correlate(data, baseline=Baseline.MODE):
     def rated_users(a):
         return len(df[a][df[a] > 0.0])
 
+    def genre_quality(a):
+        return genre_info[a] / MAX_RATING
+
     corr_matrix = np.zeros((genre_count, genre_count))
 
     ordered_genres = list(sorted(genres, key=lambda x: genre_info[x], reverse=True))
     genres_with_indices = list(enumerate(ordered_genres))
     for i, a in genres_with_indices:
         for j, b in genres_with_indices:
-            p_a = (count_users(a, a) / rated_users(a)) * (genre_info[a] / df[a].max())
-            p_b_a = (count_users(b, a) / rated_users(b)) * (genre_info[b] / df[b].max())
+            p_a = (count_users(a, a) / rated_users(a)) * genre_quality(a)
+            p_b_a = (count_users(b, a) / rated_users(b)) * genre_quality(b)
             # Probability can be maximally 1
             p_b_given_a = min(1.0, p_b_a / p_a)
             corr_matrix[i][j] = p_b_given_a
@@ -94,12 +107,12 @@ def manual_correlate(data, baseline=Baseline.MODE):
 
 def analyse_saved_data(df_file):
     df = load_saved_database(df_file, preserve_anime_data=False)
-#    c1 = correlate_data(df)
-#    plot_correlation(c1,"correlated-genres")
-#    c2 = cocluster_data(df, n_clusters=2)
+    c1 = correlate_data(df)
+    plot_correlation(c1,"correlated-genres")
+#    c2 = cluster_data(df, n_clusters=2)
 #    plot_correlation(c2,"coclustered-genres")
-    c3 = manual_correlate(df)
+    c3 = rating_map(df)
     c3.to_csv("log.txt",index=False)
-    plot_correlation(c3,"manual-correlated-genres")
+    plot_correlation(c3,"rating-mapped-genres")
 
 analyse_saved_data(RATINGS_FILE)
