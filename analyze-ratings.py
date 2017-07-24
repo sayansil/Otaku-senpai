@@ -82,15 +82,13 @@ def manual_correlate(data, baseline=Baseline.MODE):
 
     ordered_genres = list(sorted(genres, key=lambda x: genre_info[x], reverse=True))
     genres_with_indices = list(enumerate(ordered_genres))
-    with open('log2.txt', 'w+') as log:
-        for i, a in genres_with_indices:
-            for j, b in genres_with_indices:
-                p_a = count_users(a, a) / rated_users(a)
-                p_b_a = count_users(b, a) / rated_users(b)
-                # Probability can be maximally 1
-                p_b_given_a = min(1.0, p_b_a / p_a)
-                print("{}, {} -> {}, {} = {}/{} = {}".format(i, j, a, b, p_b_a, p_a, p_b_given_a), file=log)
-                corr_matrix[i][j] = p_b_given_a
+    for i, a in genres_with_indices:
+        for j, b in genres_with_indices:
+            p_a = (count_users(a, a) / rated_users(a)) * (genre_info[a] / df[a].max())
+            p_b_a = (count_users(b, a) / rated_users(b)) * (genre_info[b] / df[b].max())
+            # Probability can be maximally 1
+            p_b_given_a = min(1.0, p_b_a / p_a)
+            corr_matrix[i][j] = p_b_given_a
 
     return pd.DataFrame(np.matrix(corr_matrix), columns=ordered_genres)
 
