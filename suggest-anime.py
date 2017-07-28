@@ -25,6 +25,7 @@ class AnimeByGenre(object):
         self.known_user_ids = frozenset(self.user_data.index.values)
         self.genres = self.user_data.dtypes.index[1:-1]
         self.anime_data_indexed = self.raw_data.set_index(ANIME_KEY)
+        self.all_animes = [x[0] for x in self.anime_data_indexed.loc[:, [NAME_KEY]].values.tolist()]
 
     def get_genres(self, anime_id):
         return set(self.anime_data_indexed.loc[[int(anime_id)], [GENRE_KEY]].values[0][0])
@@ -32,16 +33,49 @@ class AnimeByGenre(object):
     def get_name(self, anime_id):
         return self.anime_data_indexed.loc[[int(anime_id)], [NAME_KEY]].values[0][0]
 
-    def containing_genre(self, genre, as_dataframe=True):
-        records = self.raw_data.to_dict(orient='records')
-        grouped = sorted([(item, len(genre & set(map(lambda x: x.lower(), item[GENRE_KEY])))) for item in records], key=itemgetter(1), reverse=True)
-        filtered = [item for item, matches in grouped if matches > 0]
+    def get_rating(self, anime_id):
+        return self.anime_data_indexed.loc[[int(anime_id)], [RATING_KEY]].values[0][0]
+
+    def get_id(self, anime_name):
+        return self.anime_data_indexed[self.anime_data_indexed[NAME_KEY] == anime_name].index[0]
+
+    def prepare_result(self, filtered, as_dataframe):
         if not filtered:
             return None
         elif as_dataframe:
             return pd.DataFrame.from_records(filtered, index=ANIME_KEY)
         else:
             return filtered
+
+    def containing_genre(self, genre, as_dataframe=True):
+        genre = frozenset(map(str.lower, genre))
+        records = self.raw_data.to_dict(orient='records')
+        grouped = sorted([(item, len(genre.intersection(map(str.lower, item[GENRE_KEY])))) for item in records], key=itemgetter(1), reverse=True)
+        filtered = [item for item, matches in grouped if matches > 0]
+        return self.prepare_result(filtered, as_dataframe)
+
+    def suggested_anime_by_anime(self, anime_ids, as_dataframe=True):
+        anime_ids = list(map(int, anime_ids))
+        all_genres = set().union(*map(self.get_genres, anime_ids))
+        data = self.containing_genre(all_genres, as_dataframe=False)
+        filtered = [item for item in data if item[ANIME_KEY] not in anime_ids]
+        return self.prepare_result(filtered, as_dataframe), all_genres
+
+    def find_by_anime(self, anime_names, results_to_display=-1, output_file=sys.stdout):
+        anime_options = [(item, difflib.get_close_matches(item, self.all_animes)) for item in anime_names]
+        anime_names = (item for item, options in anime_options if item in options)
+        for anime, options in anime_options:
+            if anime not in options:
+                if len(options) > 0:
+                    print("You might have wanted any of the following:\n", file = output_file)
+                    for option in options:
+                        print(option, file = output_file)
+                else:
+                    print("Anime of name '{}' not found!\n\n".format(anime))
+        results, genres = self.suggested_anime_by_anime(map(self.get_id, anime_names))
+        print("Genres considered: {}".format(str(genres)), file=output_file)
+        results_exist, results = self.crop_results(results, results_to_display)
+        uprint(self.format_results(results) if results_exist else "No anime found matching all genres provided.", file=output_file)
 
     def user_watched_anime_ids(self, user_id):
         return set(self.user_data.loc[[user_id], [self.user_data.dtypes.index[-1]]].values[0][0])
@@ -95,18 +129,20 @@ class AnimeByGenre(object):
                 already_recommended_ids.add(recommendation[ANIME_KEY])
                 new_recommendations.append(recommendation)
 
-        if not new_recommendations:
-            return None, all_genres
-        elif as_dataframe:
-            return pd.DataFrame.from_records(new_recommendations, index=ANIME_KEY), all_genres
-        else:
-            return new_recommendations, all_genres
+        return (self.prepare_result(new_recommendations, as_dataframe), all_genres)
 
     def format_anime(self, anime_df):
-        return map(lambda anime: (self.get_name(anime), self.get_genres(anime)), anime_df.index.values)
+        return map(lambda anime: (self.get_name(anime), self.get_rating(anime), self.get_genres(anime)), anime_df.index.values)
 
     def format_results(self, anime_df):
-       return  NAME_KEY+", "+GENRE_KEY + ":\n" + "\n".join(("{}, {}".format(name, genre) for name, genre in self.format_anime(anime_df)))
+       return  NAME_KEY+", "+RATING_KEY+", "+GENRE_KEY+":\n" + "\n".join(("{}, {}, {}".format(name, rating, genre) for name, rating, genre in self.format_anime(anime_df)))
+
+    def crop_results(self, results, results_to_display):
+        results_exist = not (results is None or len(results) == 0 or (isinstance(results, pd.DataFrame) and results.empty))
+        if results_exist and (0 <= results_to_display < len(results.index)):
+            return results_exist, results.head(results_to_display)
+        else:
+            return results_exist, results
 
     def find_by_user(self, user_ids, genres_to_consider = 2, filter_seen = True, results_to_display = -1, output_file = sys.stdout):
         user_ids = frozenset(map(int, (split_csv(user_ids) if ',' in user_ids else [user_ids]) if isinstance(user_ids, str) else user_ids))
@@ -116,7 +152,7 @@ class AnimeByGenre(object):
             results = results.head(results_to_display)
         print("Genres considered: {}".format(str(genres)))
         print("New anime recommendations based on users with IDs {}:".format(str(list(user_ids))))
-        uprint(self.format_results(results) if results_exist else "No new anime recommendations possible for user.", file = output_file)
+        uprint(self.format_results(results) if results_exist else "No new anime recommendations possible for user.", file=output_file)
 
     def find_by_genre(self, genre, results_to_display = -1, output_file = sys.stdout):
         genres = genres_tuple(self.raw_data)
@@ -143,10 +179,7 @@ class AnimeByGenre(object):
                 print(specific_genre, file = output_file)
 
         if not entry_error:
-            results = self.containing_genre(genre)
-            results_exist = not (results is None or results.empty)
-            if results_exist and (0 <= results_to_display < len(results.index)):
-                results = results.head(results_to_display)
+            results_exist, results = self.crop_results(self.containing_genre(genre), results_to_display)
             uprint(self.format_results(results) if results_exist else "No anime found matching all genres provided.", file=output_file)
 
 suggestor = AnimeByGenre(DATA_FILE, USER_DATA_FILE)
