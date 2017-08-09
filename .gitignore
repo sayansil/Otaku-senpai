@@ -12,6 +12,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Visual Studio internals
+.vs/
+
 # C extensions
 *.so
 
