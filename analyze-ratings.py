@@ -1,10 +1,14 @@
+import os
+from enum import Enum
+from pprint import pprint
+from itertools import product
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+
 from sklearn.cluster.bicluster import SpectralCoclustering
-from enum import Enum
-from pprint import pprint
+
 from utils import load_saved_database
 
 RATINGS_FILE = "./DATABASE/ratings_cleaned.tsv"
@@ -15,7 +19,7 @@ USER_KEY = 'user_id'
 MAX_RATING = 10.0
 
 def cluster_data(users, n_clusters, use_probability_correlation=False):
-    training_data = probability_map(users) if use_probability_correlation else correlate_data(users)
+    training_data = probability_map(users)[1] if use_probability_correlation else correlate_data(users)
     clustered_model = SpectralCoclustering(n_clusters = n_clusters, random_state = 0)
     clustered_model.fit(training_data)
     feed = clustered_model.row_labels_
@@ -75,7 +79,7 @@ class Baseline(Enum):
     MEAN = 3
     HALF = 4
 
-def probability_map(data, baseline=Baseline.MODE, weight=0.5):
+def probability_map(data, baseline=Baseline.MODE, weight=0.5, count_dislikes=False, complement=False):
     """
         Calculates a 2-dimensional probability distribution of the form:
         Given that users liked genre 'x', what is the probability they will like genre 'y'?
@@ -102,8 +106,8 @@ def probability_map(data, baseline=Baseline.MODE, weight=0.5):
     genres = list(df)
     genre_count = len(genres)
 
-    def users_who_liked(a, b):
-        items = df[a][df[a] >= genre_info[b][0]].index
+    def users_who_liked_or_disliked(a, b, dislikes):
+        items = df[a][df[a] < genre_info[b][0]].index if dislikes else df[a][df[a] >= genre_info[b][0]].index 
         return frozenset(items)
 
     def users_who_rated(a):
@@ -121,7 +125,10 @@ def probability_map(data, baseline=Baseline.MODE, weight=0.5):
 
     genre_info = {genre: calc_baseline(genre) for genre in genres}
 
-    correlation_matrix = np.zeros((genre_count, genre_count))
+    matrix_dimensions = (genre_count, genre_count)
+
+    correlation_matrix = np.zeros(matrix_dimensions)
+    complementation_matrix = np.ones(matrix_dimensions)
 
     def score_genre(genre):
         return (weight * genre_info[genre][0]) + ((1.0 - weight) * genre_info[genre][1])
@@ -130,12 +137,22 @@ def probability_map(data, baseline=Baseline.MODE, weight=0.5):
     genres_with_indices = list(enumerate(ordered_genres))
 
     for i, genre_a in genres_with_indices:
-        users_who_liked_a = users_who_liked(genre_a, genre_a)
+        users_who_liked_a = users_who_liked_or_disliked(genre_a, genre_a, count_dislikes)
         num_users_who_liked_a = len(users_who_liked_a)
         for j, genre_b in genres_with_indices:
-            correlation_matrix[i][j] = len(users_who_liked(genre_b, genre_b) & users_who_liked_a) / num_users_who_liked_a
+            correlation_matrix[i][j] = len(users_who_liked_or_disliked(genre_b, genre_b, count_dislikes) & users_who_liked_a) / num_users_who_liked_a
 
-    return pd.DataFrame(np.matrix(correlation_matrix), columns=ordered_genres, index=ordered_genres)    
+    final_matrix = complementation_matrix - correlation_matrix if complement else correlation_matrix
+
+    def like_or_dislike(dislike):
+        return "Disike" if dislike else "Like"
+    label_text = "{} given {}".format(like_or_dislike(complement), like_or_dislike(count_dislikes))
+
+    return (label_text, pd.DataFrame(np.matrix(final_matrix), columns=ordered_genres, index=ordered_genres))
+
+def all_probability_maps(data, baseline=Baseline.MODE, weight=0.5):
+    for count_dislikes, complement in product((False, True), repeat=2):
+        yield probability_map(data, baseline=baseline, weight=weight, count_dislikes=count_dislikes, complement=complement)
 
 def analyse_saved_data(df_file):
     data = load_saved_database(df_file, preserve_anime_data=False)
@@ -144,12 +161,13 @@ def analyse_saved_data(df_file):
     plot_data(correlation_plot,"Standard Correlated Genres")
     print("Standard Correlation plot generated")
 
-    probability_plot = probability_map(data)
-    plot_data(probability_plot,"Probability Correlated Genres")
-    print("Probability Correlation plot generated")
+    for label, probability_plot in all_probability_maps(data):
+        plot_data(probability_plot, "Probability Correlated Genres - " + label)
+    print("Probability Correlation plots generated")
 
     cluster_output(data, use_probability_correlation=False)
     cluster_output(data, use_probability_correlation=True)
     print("Coclustering plots generated")
 
-analyse_saved_data(RATINGS_FILE)
+if __name__ == "__main__":
+    analyse_saved_data(RATINGS_FILE)
