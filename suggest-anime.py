@@ -6,8 +6,8 @@ import itertools
 from operator import itemgetter
 from utils import split_csv, uprint, csv_to_dataframe_parsing_lists, genres_tuple, load_saved_database
 
-DATA_FILE = "./DATABASE/anime_cleaned.tsv"
-USER_DATA_FILE = "./DATABASE/ratings_cleaned.tsv"
+DATA_FILE = "DATABASE/anime_cleaned.tsv"
+USER_DATA_FILE = "DATABASE/ratings_cleaned.tsv"
 
 ANIME_KEY = 'anime_id'
 RATING_KEY = 'rating'
@@ -135,7 +135,7 @@ class AnimeByGenre(object):
         return map(lambda anime: (self.get_name(anime), self.get_rating(anime), self.get_genres(anime)), anime_df.index.values)
 
     def format_results(self, anime_df):
-       return  NAME_KEY+", "+RATING_KEY+", "+GENRE_KEY+":\n" + "\n".join(("{}, {}, {}".format(name, rating, genre) for name, rating, genre in self.format_anime(anime_df)))
+        return  NAME_KEY+", "+RATING_KEY+", "+GENRE_KEY+":\n" + "\n".join(("{}, {}, {}".format(name, rating, genre) for name, rating, genre in self.format_anime(anime_df)))
 
     def crop_results(self, results, results_to_display):
         results_exist = not (results is None or len(results) == 0 or (isinstance(results, pd.DataFrame) and results.empty))

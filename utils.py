@@ -12,11 +12,11 @@ def split_csv(csv_str):
 
 def uprint(*objects, sep = ' ', end = '\n', file = sys.stdout):
     enc = file.encoding
-    if enc == 'UTF-8':
+    if enc.lower() == 'utf-8':
         print(*objects, sep = sep, end = end, file = file)
     else:
         def escape(obj):
-            str(obj).encode(enc, errors = 'backslashreplace').decode(enc)
+            return str(obj).encode(enc, errors = 'backslashreplace').decode(enc)
         print(*map(escape, objects), sep = sep, end = end, file = file)
 
 def csv_to_dataframe(csv_file, sep = "\t", comment = None, keys_to_drop = None):
